@@ -20,10 +20,10 @@ spring:
     show-sql: true
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
 
   logging:
     level:
       org.springframework.transaction: DEBUG
-      org.hibernate.SQL: DEBUG
-      org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+#      org.hibernate.SQL: DEBUG
+#      org.hibernate.type.descriptor.sql.BasicBinder: TRACE

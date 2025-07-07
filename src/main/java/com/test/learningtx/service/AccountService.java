@@ -5,6 +5,7 @@ import com.test.learningtx.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -35,7 +36,16 @@ public class AccountService {
 //                String.format("Transfer %d from %s to %s", amount, fromAccount, toAccount));
 
         log.info("=== 계좌 이체 완료 ===");
-        
+    }
 
+    // READ_UNCOMMITTED: 가장 낮은 격리 레벨
+    //  - Dirty Read 가능 (커밋x 데이터 읽기)
+    //  - 성능은 가장 좋지만 데이터 일관성 문제 발생 가능
+    //  - A 트랜잭션이 데이터 변경 (아직 커밋 X) -> B 트랜잭션이 A가 변경한 데이터 읽음 -> A 트랜잭션 롤백 -> B가 읽은 데이터는 유령 데이터가 됨
+    @Transactional(isolation = Isolation.READ_UNCOMMITTED)
+    public Account readUncommitted(Long accountId) {
+        log.info("=== READ_UNCOMMITTED로 계좌 조회: {} ===", accountId);
+        return accountRepository.findById(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("계좌를 찾을 수 없음"));
     }
 }
