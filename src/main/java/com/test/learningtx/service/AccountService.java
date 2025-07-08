@@ -66,6 +66,7 @@ public class AccountService {
      * 3. REPEATABLE_READ
      *  - Dirty Read 방지
      *  - Non-Repeatable Read 방지
+     *  - Non-Repeatable Read: 동일 트랜잭션 내에서 동일한 행을 두 번 조회했을 때, 다른 트랜잭션의 수정(UPDATE)으로 인해 다른 값이 나타나는 현상
      *  - 동일 트랜잭션 내에서 항상 같은 값 읽기 보장
      */
     @Transactional(isolation = Isolation.REPEATABLE_READ)
@@ -90,4 +91,85 @@ public class AccountService {
         return List.of(first, second);
     }
 
+    /**
+     *  READ_COMMITTED 에서 Phantom Read 발생 테스트
+     * - Phantom Read: 동일 트랜잭션 내에서 같은 범위 쿼리를 두 번 실행했을 때 새로운 행이 추가로 조회됨
+     * - 삽입(INSERT)으로 인한 차이
+     * - 마치 유령(Phantom)처럼 갑자기 나타나는 행들
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public List<List<Account>> getAccountsByBalanceRangeReadCommitted(Long minBalance, Long maxBalance) {
+        log.info("=== REPEATABLE_READ로 잔액 범위 조회: {} ~ {} ===", minBalance, maxBalance);
+        
+        List<Account> firstList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
+        log.info("첫 번째 조회 완료: {}건, 시간: {}", firstList.size(), System.currentTimeMillis());
+
+        try {
+            Thread.sleep(2000); // 다른 트랜잭션이 삽입할 시간동안 대기
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        List<Account> secondList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
+        log.info("두 번째 조회 완료: {}건, 시간: {}", secondList.size(), System.currentTimeMillis());
+
+        return List.of(firstList, secondList);
+    }
+
+    /**
+     *  REPEATABLE_READ 에서 Phantom Read 발생 테스트용
+     */
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
+    public List<List<Account>> getAccountsByBalanceRangeRepeatableRead(Long minBalance, Long maxBalance) {
+        log.info("=== REPEATABLE_READ로 잔액 범위 조회: {} ~ {} ===", minBalance, maxBalance);
+
+        List<Account> firstList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
+        log.info("첫 번째 조회 완료: {}건, 시간: {}", firstList.size(), System.currentTimeMillis());
+
+        try {
+            Thread.sleep(2000); // 다른 트랜잭션이 삽입할 시간동안 대기
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        List<Account> secondList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
+        log.info("두 번째 조회 완료: {}건, 시간: {}", secondList.size(), System.currentTimeMillis());
+
+        return List.of(firstList, secondList);
+    }
+
+    /**
+     * 4. SERIALIZABLE: 가장 엄격한 격리레벨
+     *  - 모든 이상현상 방지
+     *  - Dirty Read 방지
+     *  - Non-Repeatable Read 방지
+     *  - Phantom Read 방지
+     */
+    @Transactional(isolation = Isolation.SERIALIZABLE)
+    public Account readSerializable(Long accountId) {
+        log.info("=== SERIALIZABLE로 계좌 조회: {} ===", accountId);
+        return getAccountById(accountId);
+    }
+
+    /**
+     * SERIALIZABLE로 잔액 범위 조회 (Phantom Read 방지)
+     */
+    @Transactional(isolation = Isolation.SERIALIZABLE)
+    public List<List<Account>> getAccountsByBalanceRangeSerializable(Long minBalance, Long maxBalance) {
+        log.info("=== SERIALIZABLE로 잔액 범위 조회: {} ~ {} ===", minBalance, maxBalance);
+
+        List<Account> firstList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
+        log.info("첫 번째 조회 완료: {}건, 시간: {}", firstList.size(), System.currentTimeMillis());
+
+        try {
+            Thread.sleep(2000); // 다른 트랜잭션이 삽입할 시간동안 대기
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        List<Account> secondList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
+        log.info("두 번째 조회 완료: {}건, 시간: {}", secondList.size(), System.currentTimeMillis());
+
+        return List.of(firstList, secondList);
+    }
 }

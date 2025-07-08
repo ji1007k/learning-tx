@@ -46,7 +46,7 @@ public class BasicTxTest {
     }
 
     @Test
-    @DisplayName("기본 계좌이체 테스트")
+    @DisplayName("[1] 기본 계좌이체 테스트")
     void testBasicTransfer() {
         // given (준비)
         //  - 테스트에 필요한 초기 상황 설정
@@ -68,7 +68,7 @@ public class BasicTxTest {
     }
 
     @Test
-    @DisplayName("READ_UNCOMMITTED: Dirty Read 테스트")
+    @DisplayName("[2] READ_UNCOMMITTED: Dirty Read 테스트")
     void testDirtyRead() throws Exception {
         Long accountId = account1.getId();
         boolean dirtyReadExists = false;
@@ -122,7 +122,7 @@ public class BasicTxTest {
     }
 
     @Test
-    @DisplayName("READ_COMMITTED 기본 테스트")
+    @DisplayName("[3-1] READ_COMMITTED: 기본 테스트")
     void testReadCommitted() {
         // given
         Account account = new Account("READ_COMMITTED_TEST", 1000L);
@@ -136,7 +136,7 @@ public class BasicTxTest {
     }
 
     @Test
-    @DisplayName("READ_COMMITTED: Dirty Read 방지 테스트")
+    @DisplayName("[3-2] READ_COMMITTED: Dirty Read 방지 테스트")
     void testReadCommittedPreventsDirtyRead() throws Exception {
         // given
         Account account = new Account("DIRTY_READ_TEST", 1000L);
@@ -185,7 +185,7 @@ public class BasicTxTest {
      * thenApply // 리턴값 있는 체이닝 (이전 작업 완료 후 실행)
      */
     @Test
-    @DisplayName("READ_COMMITTED: Non-Repeatable Read 발생 테스트")
+    @DisplayName("[3-3] READ_COMMITTED: Non-Repeatable Read 발생 테스트")
     void testReadCommittedNonRepeatableRead() throws ExecutionException, InterruptedException, TimeoutException {
         Account account = new Account("NON_REPEATABLE_TEST", 2000L);
         accountRepository.saveAndFlush(account);
@@ -214,9 +214,58 @@ public class BasicTxTest {
         System.out.println("Non Repeatable Read 발생!");
     }
 
+    @Test
+    @DisplayName("[3-4] READ_COMMITTED: Phantom Read 발생 테스트")
+    void testReadCommittedPhantomRead() throws ExecutionException, InterruptedException, TimeoutException {
+        Account account1 = new Account("PHANTOM_TEST_1", 1500L);
+        Account account2 = new Account("PHANTOM_TEST_2", 2500L);
+        accountRepository.saveAndFlush(account1);
+        accountRepository.saveAndFlush(account2);
+
+        boolean phantomReadExists = false;
+        
+        for (int i=0; i<10; i++) {
+            System.out.println("=== 시도 " + (i+1) + " ===");
+
+            // READ_COMMITTED로 범위 조회
+            CompletableFuture<List<List<Account>>> firstQuery = CompletableFuture.supplyAsync(() -> {
+                return accountService.getAccountsByBalanceRangeReadCommitted(1000L, 3000L);
+            });
+
+            // 첫 번째 조회 후 새로운 데이터 삽입 (트랜잭션B)
+            CompletableFuture<Void> insertTask = CompletableFuture.runAsync(() -> {
+                try {
+                    Thread.sleep(1000); // 첫번째 조회 후 삽입
+                    testTxService.insertAccountAndCommit("PHANTOM_NEW", 2000L);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            // 모든 작업이 종료될 때까지 대기
+            CompletableFuture.allOf(firstQuery, insertTask).get(5, TimeUnit.SECONDS);
+
+            // Then: 첫 번째와 두 번째 조회 결과가 다를 수 있음 (Phantom Read)
+            List<List<Account>> firstQueryResult = firstQuery.get();
+            List<Account> firstList = firstQueryResult.get(0);
+            List<Account> secondList = firstQueryResult.get(1);
+
+            System.out.println("첫 번째 조회 결과 수: " + firstList.size());
+            System.out.println("두 번째 조회 결과 수: " + secondList.size());
+
+            if (firstList.size() != secondList.size()) {
+                System.out.println("Phantom Read 발생!");
+                phantomReadExists = true;
+                break;
+            }
+        }
+        
+        // Phantom Read 발생 확인
+        assertThat(phantomReadExists).isTrue();
+    }
 
     @Test
-    @DisplayName("READ_COMMITTED: Non-Repeatable Read 방지 테스트")
+    @DisplayName("[4-1] REPEATABLE_READ: Non-Repeatable Read 방지 테스트")
     void testRepeatableReadPreventsNonRepeatableRead() throws ExecutionException, InterruptedException, TimeoutException {
         Account account = new Account("NON_REPEATABLE_TEST", 2000L);
         accountRepository.saveAndFlush(account);
@@ -243,6 +292,122 @@ public class BasicTxTest {
         System.out.println("REPEATABLE_READ: Non-Repeatable Read 방지 성공!");
     }
 
+    // 이론: REPEATABLE_READ에서도 Phantom Read 발생
+    // 실제: 많은 DB(MySQL InnoDB, H2 등)가 REPEATABLE_READ에서도 Phantom Read를 방지
+    @Test
+    @DisplayName("[4-2] REPEATABLE_READ: Phantom Read 방지 테스트")
+    void testRepeatableReadPreventsPhantomRead() throws ExecutionException, InterruptedException, TimeoutException {
+        Account account1 = new Account("PHANTOM_TEST_1", 1500L);
+        Account account2 = new Account("PHANTOM_TEST_2", 2500L);
+        accountRepository.saveAndFlush(account1);
+        accountRepository.saveAndFlush(account2);
+
+        boolean phantomReadExists = false;
+        
+        for (int i=0; i<5; i++) {
+            System.out.println("=== 시도 " + (i+1) + " ===");
+
+            // REPEATABLE_READ로 범위 조회
+            CompletableFuture<List<List<Account>>> firstQuery = CompletableFuture.supplyAsync(() -> {
+                return accountService.getAccountsByBalanceRangeRepeatableRead(1000L, 3000L);
+            });
+
+            // 첫 번째 조회 후 새로운 데이터 삽입 (트랜잭션B)
+            CompletableFuture<Void> insertTask = CompletableFuture.runAsync(() -> {
+                try {
+                    Thread.sleep(1000); // 첫번째 조회 후 삽입
+                    testTxService.insertAccountAndCommit("PHANTOM_NEW", 2000L);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            // 모든 작업이 종료될 때까지 대기
+            CompletableFuture.allOf(firstQuery, insertTask).get(5, TimeUnit.SECONDS);
+
+            // Then: 첫 번째와 두 번째 조회 결과가 다를 수 있음 (Phantom Read)
+            List<List<Account>> firstQueryResult = firstQuery.get();
+            List<Account> firstList = firstQueryResult.get(0);
+            List<Account> secondList = firstQueryResult.get(1);
+
+            System.out.println("첫 번째 조회 결과 수: " + firstList.size());
+            System.out.println("두 번째 조회 결과 수: " + secondList.size());
+
+            if (firstList.size() != secondList.size()) {
+                System.out.println("Phantom Read 발생!");
+                phantomReadExists = true;
+                break;
+            }
+        }
+
+        // 실제 많은 DB(MySQL InnoDB, H2 등)가 REPEATABLE_READ에서도 Phantom Read를 방지해 보다 안전하게 구현되어있음
+        System.out.println("Phantom Read 미발생");
+        assertThat(phantomReadExists).isFalse();
+    }
+
+    @Test
+    @DisplayName("[5-1] SERIALIZABLE: 기본 테스트")
+    void testSerializable() {
+        Account account = new Account("SERIALIZABLE_TEST", 3000L);
+        accountRepository.saveAndFlush(account);
+
+        Account result = accountService.readSerializable(account.getId());
+
+        assertThat(result).isNotNull();
+        assertThat(result.getBalance()).isEqualTo(3000L);
+        assertThat(result.getName()).isEqualTo("SERIALIZABLE_TEST");
+    }
+
+    @Test
+    @DisplayName("[5-2] SERIALIZABLE: Phantom Read 방지 테스트")
+    void testSerializablePreventsPhantomRead() throws ExecutionException, InterruptedException, TimeoutException {
+        Account account1 = new Account("PHANTOM_TEST_1", 1500L);
+        Account account2 = new Account("PHANTOM_TEST_2", 2500L);
+        accountRepository.saveAndFlush(account1);
+        accountRepository.saveAndFlush(account2);
+
+        boolean phantomReadExists = false;
+
+        for (int i=0; i<5; i++) {
+            System.out.println("=== 시도 " + (i+1) + " ===");
+
+            // SERIALIZABLE 범위 조회
+            CompletableFuture<List<List<Account>>> firstQuery = CompletableFuture.supplyAsync(() -> {
+                return accountService.getAccountsByBalanceRangeSerializable(1000L, 3000L);
+            });
+
+            // 첫 번째 조회 후 새로운 데이터 삽입 (트랜잭션B)
+            CompletableFuture<Void> insertTask = CompletableFuture.runAsync(() -> {
+                try {
+                    Thread.sleep(1000); // 첫번째 조회 후 삽입
+                    testTxService.insertAccountAndCommit("PHANTOM_NEW", 2000L);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            // 모든 작업이 종료될 때까지 대기
+            CompletableFuture.allOf(firstQuery, insertTask).get(5, TimeUnit.SECONDS);
+
+            // Then: 첫 번째와 두 번째 조회 결과가 다를 수 있음 (Phantom Read)
+            List<List<Account>> firstQueryResult = firstQuery.get();
+            List<Account> firstList = firstQueryResult.get(0);
+            List<Account> secondList = firstQueryResult.get(1);
+
+            System.out.println("첫 번째 조회 결과 수: " + firstList.size());
+            System.out.println("두 번째 조회 결과 수: " + secondList.size());
+
+            if (firstList.size() != secondList.size()) {
+                System.out.println("Phantom Read 발생!");
+                phantomReadExists = true;
+                break;
+            }
+        }
+
+        // 실제 많은 DB(MySQL InnoDB, H2 등)가 REPEATABLE_READ에서도 Phantom Read를 방지해 보다 안전하게 구현되어있음
+        System.out.println("Phantom Read 미발생");
+        assertThat(phantomReadExists).isFalse();
+    }
 
 
 

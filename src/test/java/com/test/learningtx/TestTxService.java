@@ -46,4 +46,16 @@ public class TestTxService {
         // 트랜잭션 끝나면 자동 커밋됨
         System.out.println("=== 트랜잭션B 종료 ===");
     }
+
+    @Transactional
+    public void insertAccountAndCommit(String name, long balance) {
+        System.out.println("=== 트랜잭션B 시작 ===");
+
+        Account newAccount = new Account();
+        newAccount.setName(name);
+        newAccount.setBalance(balance);
+        accountRepository.saveAndFlush(newAccount);
+
+        System.out.println("=== 트랜잭션B 종료 ===");
+    }
 }
