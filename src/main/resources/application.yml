@@ -5,16 +5,24 @@ spring:
   active:
     profiles: dev
 
-# ???? ??? DB
+  # H2 Database 설정 (개발/테스트용)
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
     username: sa
     password: password
+    # Connection Pool 설정
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  # H2 Console 활성화
   h2:
     console:
       enabled: true
+  # JPA 설정
   jpa:
+    # 연결할 데이터베이스인 H2 문법에 맞는 SQL을 생성해줘 라고 Hibernate에게 알려주는 것
+    database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: create-drop
     show-sql: true
@@ -22,9 +30,11 @@ spring:
       hibernate:
         format_sql: false
 
+  # 로깅 설정
   logging:
     level:
       root: INFO
+      org.hibernate.SQL: DEBUG
+      org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+      org.springframework.orm.jpa: DEBUG
       org.springframework.transaction: DEBUG
-#      org.hibernate.SQL: DEBUG
-#      org.hibernate.type.descriptor.sql.BasicBinder: TRACE

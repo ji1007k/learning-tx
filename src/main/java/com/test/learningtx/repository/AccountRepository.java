@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -29,5 +30,5 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     Optional<Account> findByName(String name);
 
-    List<Account> findByBalanceBetween(Long minBalance, Long maxBalance);
+    List<Account> findByBalanceBetween(BigDecimal minBalance, BigDecimal maxBalance);
 }

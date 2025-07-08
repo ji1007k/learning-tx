@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+
 @Service
 public class TestTxService {
 
@@ -13,7 +15,7 @@ public class TestTxService {
     private AccountRepository accountRepository;
 
     @Transactional
-    void updateBalanceAndRollback(Long accountId, Long newBalance) {
+    void updateBalanceAndRollback(Long accountId, BigDecimal newBalance) {
         System.out.println("=== updateAndRollback 시작 ===");
 
         Account beforeAccount = accountRepository.findById(accountId).get();
@@ -34,7 +36,7 @@ public class TestTxService {
     }
 
     @Transactional
-    public void updateBalanceAndCommit(Long accountId, long newBanlance) {
+    public void updateBalanceAndCommit(Long accountId, BigDecimal newBanlance) {
         System.out.println("=== 트랜잭션B 시작 ===");
         
         Account account = accountRepository.findById(accountId)
@@ -48,7 +50,7 @@ public class TestTxService {
     }
 
     @Transactional
-    public void insertAccountAndCommit(String name, long balance) {
+    public void insertAccountAndCommit(String name, BigDecimal balance) {
         System.out.println("=== 트랜잭션B 시작 ===");
 
         Account newAccount = new Account();

@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -39,8 +40,8 @@ public class BasicTxTest {
     @BeforeEach
     void setUp() {
         accountRepository.deleteAll();
-        account1 = new Account("홍길동", 10000L);
-        account2 = new Account("김철수", 5000L);
+        account1 = new Account("홍길동", BigDecimal.valueOf(10000L));
+        account2 = new Account("김철수", BigDecimal.valueOf(5000L));
         account1 = accountRepository.save(account1);
         account2 = accountRepository.save(account2);
     }
@@ -51,7 +52,7 @@ public class BasicTxTest {
         // given (준비)
         //  - 테스트에 필요한 초기 상황 설정
         //  - 데이터 준비, 상태 설정 등
-        Long transferAmount = 3000L;
+        BigDecimal transferAmount = BigDecimal.valueOf(3000L);
 
         // when (실행)
         //  - 실제 테스트 동작 수행
@@ -63,8 +64,8 @@ public class BasicTxTest {
         Account updatedAccount1 = accountRepository.findById(account1.getId()).get();
         Account updatedAccount2 = accountRepository.findById(account2.getId()).get();
 
-        assertEquals(7000L, updatedAccount1.getBalance());
-        assertEquals(8000L, updatedAccount2.getBalance());
+        assertEquals(BigDecimal.valueOf(7000L), updatedAccount1.getBalance());
+        assertEquals(BigDecimal.valueOf(8000L), updatedAccount2.getBalance());
     }
 
     @Test
@@ -92,7 +93,7 @@ public class BasicTxTest {
             //  - runAsync: 반환값이 없는 비동기 작업
             CompletableFuture<Void> updateTask = CompletableFuture.runAsync(() -> {
                 try {
-                    testTxService.updateBalanceAndRollback(accountId, 5000L);
+                    testTxService.updateBalanceAndRollback(accountId, BigDecimal.valueOf(5000L));
                 } catch (Exception e) {
                     // 의도적 롤백 예외 무시
                     System.out.println("예상된 롤백 발생: " + e.getMessage());
@@ -125,13 +126,13 @@ public class BasicTxTest {
     @DisplayName("[3-1] READ_COMMITTED: 기본 테스트")
     void testReadCommitted() {
         // given
-        Account account = new Account("READ_COMMITTED_TEST", 1000L);
+        Account account = new Account("READ_COMMITTED_TEST", BigDecimal.valueOf(1000L));
         accountRepository.saveAndFlush(account);
 
         Account result = accountService.readCommitted(account.getId());
 
         assertThat(result).isNotNull();
-        assertThat(result.getBalance()).isEqualTo(1000L);
+        assertThat(result.getBalance()).isEqualTo(BigDecimal.valueOf(1000L));
         assertThat(result.getName()).isEqualTo("READ_COMMITTED_TEST");
     }
 
@@ -139,7 +140,7 @@ public class BasicTxTest {
     @DisplayName("[3-2] READ_COMMITTED: Dirty Read 방지 테스트")
     void testReadCommittedPreventsDirtyRead() throws Exception {
         // given
-        Account account = new Account("DIRTY_READ_TEST", 1000L);
+        Account account = new Account("DIRTY_READ_TEST", BigDecimal.valueOf(1000L));
         accountRepository.saveAndFlush(account);
 
         // 10번 반복할 동안 Dirty Read 발생여부 확인
@@ -159,7 +160,7 @@ public class BasicTxTest {
             // 메인 스레드에서 데이터 수정 후 롤백
             CompletableFuture<Void> writeFuture = CompletableFuture.runAsync(() -> {
                 try {
-                    testTxService.updateBalanceAndRollback(account.getId(), 5000L);
+                    testTxService.updateBalanceAndRollback(account.getId(), BigDecimal.valueOf(5000L));
                 } catch (Exception e) {
                     // 롤백 예외는 예상된 동작
                 }
@@ -172,7 +173,7 @@ public class BasicTxTest {
             // then - uncommitted 데이터(5000)가 아닌 원래 값(1000)을 읽어야 함
             Account result = readFuture.get();
             assertThat(result).isNotNull();
-            assertThat(result.getBalance()).isEqualTo(1000L); // Dirty Read 방지
+            assertThat(result.getBalance()).isEqualTo(BigDecimal.valueOf(1000L)); // Dirty Read 방지
         }
 
         System.out.println("테스트 종료: Dirty Read 발생하지 않음");
@@ -187,7 +188,7 @@ public class BasicTxTest {
     @Test
     @DisplayName("[3-3] READ_COMMITTED: Non-Repeatable Read 발생 테스트")
     void testReadCommittedNonRepeatableRead() throws ExecutionException, InterruptedException, TimeoutException {
-        Account account = new Account("NON_REPEATABLE_TEST", 2000L);
+        Account account = new Account("NON_REPEATABLE_TEST", BigDecimal.valueOf(2000L));
         accountRepository.saveAndFlush(account);
 
         CompletableFuture<Account> firstRead = CompletableFuture.supplyAsync(() -> {
@@ -196,7 +197,7 @@ public class BasicTxTest {
 
         // 첫 번째 읽기 후에 수정
         CompletableFuture<Void> updateTask = firstRead.thenRun(() -> {
-            testTxService.updateBalanceAndCommit(account.getId(), 3000L);
+            testTxService.updateBalanceAndCommit(account.getId(), BigDecimal.valueOf(3000L));
         });
 
         // 수정 후 두번째 읽기
@@ -208,8 +209,8 @@ public class BasicTxTest {
         Account first = firstRead.get();
         Account second = secondRead.get(5, TimeUnit.SECONDS);
         
-        assertThat(first.getBalance()).isEqualTo(2000L);    // 원래 값
-        assertThat(second.getBalance()).isEqualTo(3000L);   // 수정된 값
+        assertThat(first.getBalance()).isEqualTo(BigDecimal.valueOf(2000L));    // 원래 값
+        assertThat(second.getBalance()).isEqualTo(BigDecimal.valueOf(3000L));   // 수정된 값
 
         System.out.println("Non Repeatable Read 발생!");
     }
@@ -217,8 +218,8 @@ public class BasicTxTest {
     @Test
     @DisplayName("[3-4] READ_COMMITTED: Phantom Read 발생 테스트")
     void testReadCommittedPhantomRead() throws ExecutionException, InterruptedException, TimeoutException {
-        Account account1 = new Account("PHANTOM_TEST_1", 1500L);
-        Account account2 = new Account("PHANTOM_TEST_2", 2500L);
+        Account account1 = new Account("PHANTOM_TEST_1", BigDecimal.valueOf(1500L));
+        Account account2 = new Account("PHANTOM_TEST_2", BigDecimal.valueOf(2500L));
         accountRepository.saveAndFlush(account1);
         accountRepository.saveAndFlush(account2);
 
@@ -229,14 +230,16 @@ public class BasicTxTest {
 
             // READ_COMMITTED로 범위 조회
             CompletableFuture<List<List<Account>>> firstQuery = CompletableFuture.supplyAsync(() -> {
-                return accountService.getAccountsByBalanceRangeReadCommitted(1000L, 3000L);
+                return accountService.getAccountsByBalanceRangeReadCommitted(
+                        BigDecimal.valueOf(1000L),
+                        BigDecimal.valueOf(3000L));
             });
 
             // 첫 번째 조회 후 새로운 데이터 삽입 (트랜잭션B)
             CompletableFuture<Void> insertTask = CompletableFuture.runAsync(() -> {
                 try {
                     Thread.sleep(1000); // 첫번째 조회 후 삽입
-                    testTxService.insertAccountAndCommit("PHANTOM_NEW", 2000L);
+                    testTxService.insertAccountAndCommit("PHANTOM_NEW", BigDecimal.valueOf(2000L));
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -267,7 +270,7 @@ public class BasicTxTest {
     @Test
     @DisplayName("[4-1] REPEATABLE_READ: Non-Repeatable Read 방지 테스트")
     void testRepeatableReadPreventsNonRepeatableRead() throws ExecutionException, InterruptedException, TimeoutException {
-        Account account = new Account("NON_REPEATABLE_TEST", 2000L);
+        Account account = new Account("NON_REPEATABLE_TEST", BigDecimal.valueOf(2000L));
         accountRepository.saveAndFlush(account);
 
         // 읽기 (트랜잭션A)
@@ -277,7 +280,7 @@ public class BasicTxTest {
 
         // 새 트랜잭션B에서 수정
         CompletableFuture<Void> updateTask = CompletableFuture.runAsync(() -> {
-            testTxService.updateBalanceAndCommit(account.getId(), 5000L);
+            testTxService.updateBalanceAndCommit(account.getId(), BigDecimal.valueOf(5000L));
         });
 
         // 모든 작업 완료 대기
@@ -286,8 +289,8 @@ public class BasicTxTest {
         // 첫번째와 두번째 읽기 결과가 동일한지 확인
         List<Account> accounts = readTask.get();
 
-        assertThat(accounts.get(0).getBalance()).isEqualTo(2000L);      // 원래 값
-        assertThat(accounts.get(1).getBalance()).isEqualTo(2000L);      // 같은 값 유지!
+        assertThat(accounts.get(0).getBalance()).isEqualTo(BigDecimal.valueOf(2000L));      // 원래 값
+        assertThat(accounts.get(1).getBalance()).isEqualTo(BigDecimal.valueOf(2000L));      // 같은 값 유지!
 
         System.out.println("REPEATABLE_READ: Non-Repeatable Read 방지 성공!");
     }
@@ -297,8 +300,8 @@ public class BasicTxTest {
     @Test
     @DisplayName("[4-2] REPEATABLE_READ: Phantom Read 방지 테스트")
     void testRepeatableReadPreventsPhantomRead() throws ExecutionException, InterruptedException, TimeoutException {
-        Account account1 = new Account("PHANTOM_TEST_1", 1500L);
-        Account account2 = new Account("PHANTOM_TEST_2", 2500L);
+        Account account1 = new Account("PHANTOM_TEST_1", BigDecimal.valueOf(1500L));
+        Account account2 = new Account("PHANTOM_TEST_2", BigDecimal.valueOf(2500L));
         accountRepository.saveAndFlush(account1);
         accountRepository.saveAndFlush(account2);
 
@@ -309,14 +312,16 @@ public class BasicTxTest {
 
             // REPEATABLE_READ로 범위 조회
             CompletableFuture<List<List<Account>>> firstQuery = CompletableFuture.supplyAsync(() -> {
-                return accountService.getAccountsByBalanceRangeRepeatableRead(1000L, 3000L);
+                return accountService.getAccountsByBalanceRangeRepeatableRead(
+                        BigDecimal.valueOf(1000L),
+                        BigDecimal.valueOf(3000L));
             });
 
             // 첫 번째 조회 후 새로운 데이터 삽입 (트랜잭션B)
             CompletableFuture<Void> insertTask = CompletableFuture.runAsync(() -> {
                 try {
                     Thread.sleep(1000); // 첫번째 조회 후 삽입
-                    testTxService.insertAccountAndCommit("PHANTOM_NEW", 2000L);
+                    testTxService.insertAccountAndCommit("PHANTOM_NEW", BigDecimal.valueOf(2000L));
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -348,21 +353,21 @@ public class BasicTxTest {
     @Test
     @DisplayName("[5-1] SERIALIZABLE: 기본 테스트")
     void testSerializable() {
-        Account account = new Account("SERIALIZABLE_TEST", 3000L);
+        Account account = new Account("SERIALIZABLE_TEST", BigDecimal.valueOf(3000L));
         accountRepository.saveAndFlush(account);
 
         Account result = accountService.readSerializable(account.getId());
 
         assertThat(result).isNotNull();
-        assertThat(result.getBalance()).isEqualTo(3000L);
+        assertThat(result.getBalance()).isEqualTo(BigDecimal.valueOf(3000L));
         assertThat(result.getName()).isEqualTo("SERIALIZABLE_TEST");
     }
 
     @Test
     @DisplayName("[5-2] SERIALIZABLE: Phantom Read 방지 테스트")
     void testSerializablePreventsPhantomRead() throws ExecutionException, InterruptedException, TimeoutException {
-        Account account1 = new Account("PHANTOM_TEST_1", 1500L);
-        Account account2 = new Account("PHANTOM_TEST_2", 2500L);
+        Account account1 = new Account("PHANTOM_TEST_1", BigDecimal.valueOf(1500L));
+        Account account2 = new Account("PHANTOM_TEST_2", BigDecimal.valueOf(2500L));
         accountRepository.saveAndFlush(account1);
         accountRepository.saveAndFlush(account2);
 
@@ -373,14 +378,16 @@ public class BasicTxTest {
 
             // SERIALIZABLE 범위 조회
             CompletableFuture<List<List<Account>>> firstQuery = CompletableFuture.supplyAsync(() -> {
-                return accountService.getAccountsByBalanceRangeSerializable(1000L, 3000L);
+                return accountService.getAccountsByBalanceRangeSerializable(
+                        BigDecimal.valueOf(1000L),
+                        BigDecimal.valueOf(3000L));
             });
 
             // 첫 번째 조회 후 새로운 데이터 삽입 (트랜잭션B)
             CompletableFuture<Void> insertTask = CompletableFuture.runAsync(() -> {
                 try {
                     Thread.sleep(1000); // 첫번째 조회 후 삽입
-                    testTxService.insertAccountAndCommit("PHANTOM_NEW", 2000L);
+                    testTxService.insertAccountAndCommit("PHANTOM_NEW", BigDecimal.valueOf(2000L));
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }

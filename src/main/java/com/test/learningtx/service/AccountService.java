@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -23,7 +24,7 @@ public class AccountService {
     }
 
     @Transactional  // 메서드 전체가 하나의 트랜잭션
-    public void transfer(Long fromId, Long toId, Long amount) {
+    public void transfer(Long fromId, Long toId, BigDecimal amount) {
         log.info("=== 계좌 이체 시작: {} -> {}, 금액: {} ===", fromId, toId, amount);
 
         Account fromAccount = getAccountById(fromId);
@@ -98,7 +99,7 @@ public class AccountService {
      * - 마치 유령(Phantom)처럼 갑자기 나타나는 행들
      */
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public List<List<Account>> getAccountsByBalanceRangeReadCommitted(Long minBalance, Long maxBalance) {
+    public List<List<Account>> getAccountsByBalanceRangeReadCommitted(BigDecimal minBalance, BigDecimal maxBalance) {
         log.info("=== REPEATABLE_READ로 잔액 범위 조회: {} ~ {} ===", minBalance, maxBalance);
         
         List<Account> firstList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
@@ -120,7 +121,7 @@ public class AccountService {
      *  REPEATABLE_READ 에서 Phantom Read 발생 테스트용
      */
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    public List<List<Account>> getAccountsByBalanceRangeRepeatableRead(Long minBalance, Long maxBalance) {
+    public List<List<Account>> getAccountsByBalanceRangeRepeatableRead(BigDecimal minBalance, BigDecimal maxBalance) {
         log.info("=== REPEATABLE_READ로 잔액 범위 조회: {} ~ {} ===", minBalance, maxBalance);
 
         List<Account> firstList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
@@ -155,7 +156,7 @@ public class AccountService {
      * SERIALIZABLE로 잔액 범위 조회 (Phantom Read 방지)
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
-    public List<List<Account>> getAccountsByBalanceRangeSerializable(Long minBalance, Long maxBalance) {
+    public List<List<Account>> getAccountsByBalanceRangeSerializable(BigDecimal minBalance, BigDecimal maxBalance) {
         log.info("=== SERIALIZABLE로 잔액 범위 조회: {} ~ {} ===", minBalance, maxBalance);
 
         List<Account> firstList = accountRepository.findByBalanceBetween(minBalance, maxBalance);
