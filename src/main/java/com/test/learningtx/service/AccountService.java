@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class AccountService {
 
     private final AccountRepository accountRepository;
-//    private final LogService logService;
 
     @Transactional  // 메서드 전체가 하나의 트랜잭션
     public void transfer(Long fromId, Long toId, Long amount) {
@@ -32,19 +31,43 @@ public class AccountService {
         accountRepository.save(fromAccount);
         accountRepository.save(toAccount);
 
-//        logService.logTransaction("TRANSFER",
-//                String.format("Transfer %d from %s to %s", amount, fromAccount, toAccount));
-
         log.info("=== 계좌 이체 완료 ===");
     }
 
-    // READ_UNCOMMITTED: 가장 낮은 격리 레벨
-    //  - Dirty Read 가능 (커밋x 데이터 읽기)
-    //  - 성능은 가장 좋지만 데이터 일관성 문제 발생 가능
-    //  - A 트랜잭션이 데이터 변경 (아직 커밋 X) -> B 트랜잭션이 A가 변경한 데이터 읽음 -> A 트랜잭션 롤백 -> B가 읽은 데이터는 유령 데이터가 됨
+    /**
+     * 1. READ_UNCOMMITTED: 가장 낮은 격리 레벨
+     *  - Dirty Read 가능 (커밋x 데이터 읽기)
+     *  - 성능은 가장 좋지만 데이터 일관성 문제 발생 가능
+     *  - A 트랜잭션이 데이터 변경 (아직 커밋 X) -> B 트랜잭션이 A가 변경한 데이터 읽음 -> A 트랜잭션 롤백 -> B가 읽은 데이터는 유령 데이터가 됨
+     */
     @Transactional(isolation = Isolation.READ_UNCOMMITTED)
     public Account readUncommitted(Long accountId) {
         log.info("=== READ_UNCOMMITTED로 계좌 조회: {} ===", accountId);
+        return accountRepository.findById(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("계좌를 찾을 수 없음"));
+    }
+
+    /**
+     * 2. READ_COMMMITTED
+     *  - 커밋된 데이터만 읽기 가능
+     *  - Dirty Read 방지
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)    // H2 기본 설정
+    public Account readCommitted(Long accountId) {
+        log.info("=== READ_COMMITTED로 계좌 조회: {} ===", accountId);
+        return accountRepository.findById(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("계좌를 찾을 수 없음"));
+    }
+
+    /**
+     * 3. READ_COMMITTED
+     *  - Dirty Read 방지
+     *  - Non-Repeatable Read 방지
+     *  - 동일 트랜잭션 내에서 항상 같은 값 읽기 보장
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public Account readRepeatableRead(Long accountId) {
+        log.info("=== REPEATABLE_READ로 계좌 조회: {} ===", accountId);
         return accountRepository.findById(accountId)
                 .orElseThrow(() -> new IllegalArgumentException("계좌를 찾을 수 없음"));
     }
