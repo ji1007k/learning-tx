@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -15,15 +17,18 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
 
+    public Account getAccountById(Long accountId) {
+        return accountRepository.findById(accountId)
+                .orElseThrow(() -> new IllegalArgumentException("계좌를 찾을 수 없음: " + accountId));
+    }
+
     @Transactional  // 메서드 전체가 하나의 트랜잭션
     public void transfer(Long fromId, Long toId, Long amount) {
         log.info("=== 계좌 이체 시작: {} -> {}, 금액: {} ===", fromId, toId, amount);
 
-        Account fromAccount = accountRepository.findById(fromId)
-                .orElseThrow(() -> new IllegalArgumentException("출금 계좌를 찾을 수 없음"));
+        Account fromAccount = getAccountById(fromId);
         
-        Account toAccount = accountRepository.findById(toId)
-                .orElseThrow(() -> new IllegalArgumentException("입금 계좌를 찾을 수 없음"));
+        Account toAccount = getAccountById(toId);
 
         fromAccount.withdraw(amount);
         toAccount.deposit(amount);
@@ -43,8 +48,7 @@ public class AccountService {
     @Transactional(isolation = Isolation.READ_UNCOMMITTED)
     public Account readUncommitted(Long accountId) {
         log.info("=== READ_UNCOMMITTED로 계좌 조회: {} ===", accountId);
-        return accountRepository.findById(accountId)
-                .orElseThrow(() -> new IllegalArgumentException("계좌를 찾을 수 없음"));
+        return getAccountById(accountId);
     }
 
     /**
@@ -55,20 +59,35 @@ public class AccountService {
     @Transactional(isolation = Isolation.READ_COMMITTED)    // H2 기본 설정
     public Account readCommitted(Long accountId) {
         log.info("=== READ_COMMITTED로 계좌 조회: {} ===", accountId);
-        return accountRepository.findById(accountId)
-                .orElseThrow(() -> new IllegalArgumentException("계좌를 찾을 수 없음"));
+        return getAccountById(accountId);
     }
 
     /**
-     * 3. READ_COMMITTED
+     * 3. REPEATABLE_READ
      *  - Dirty Read 방지
      *  - Non-Repeatable Read 방지
      *  - 동일 트랜잭션 내에서 항상 같은 값 읽기 보장
      */
-    @Transactional(isolation = Isolation.READ_COMMITTED)
-    public Account readRepeatableRead(Long accountId) {
+    @Transactional(isolation = Isolation.REPEATABLE_READ)
+    public List<Account> readTwiceInSameTransaction(Long accountId) {
+        log.info("=== 트랜잭션A 시작 ===");
         log.info("=== REPEATABLE_READ로 계좌 조회: {} ===", accountId);
-        return accountRepository.findById(accountId)
-                .orElseThrow(() -> new IllegalArgumentException("계좌를 찾을 수 없음"));
+        
+        // 첫 번째 읽기
+        Account first = getAccountById(accountId);
+
+        // 중간에 잠깐 대기 (다른 트랜잭션이 수정할 시간)
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        // 두 번째 읽기 (같은 트랜잭션 내에서)
+        Account second = getAccountById(accountId);
+
+        log.info("=== 트랜잭션A 종료 ===");
+        return List.of(first, second);
     }
+
 }
