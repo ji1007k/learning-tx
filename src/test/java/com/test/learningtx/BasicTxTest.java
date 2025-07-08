@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -186,8 +187,6 @@ public class BasicTxTest {
     @Test
     @DisplayName("READ_COMMITTED: Non-Repeatable Read 발생 테스트")
     void testReadCommittedNonRepeatableRead() throws ExecutionException, InterruptedException, TimeoutException {
-        System.out.println("=== 트랜잭션A 시작 ===");
-        
         Account account = new Account("NON_REPEATABLE_TEST", 2000L);
         accountRepository.saveAndFlush(account);
 
@@ -213,7 +212,38 @@ public class BasicTxTest {
         assertThat(second.getBalance()).isEqualTo(3000L);   // 수정된 값
 
         System.out.println("Non Repeatable Read 발생!");
-        System.out.println("=== 트랜잭션A 종료 ===");
     }
+
+
+    @Test
+    @DisplayName("READ_COMMITTED: Non-Repeatable Read 방지 테스트")
+    void testRepeatableReadPreventsNonRepeatableRead() throws ExecutionException, InterruptedException, TimeoutException {
+        Account account = new Account("NON_REPEATABLE_TEST", 2000L);
+        accountRepository.saveAndFlush(account);
+
+        // 읽기 (트랜잭션A)
+        CompletableFuture<List<Account>> readTask = CompletableFuture.supplyAsync(() -> {
+            return accountService.readTwiceInSameTransaction(account.getId());
+        });
+
+        // 새 트랜잭션B에서 수정
+        CompletableFuture<Void> updateTask = CompletableFuture.runAsync(() -> {
+            testTxService.updateBalanceAndCommit(account.getId(), 5000L);
+        });
+
+        // 모든 작업 완료 대기
+        CompletableFuture.allOf(readTask, updateTask).get(5, TimeUnit.SECONDS);
+        
+        // 첫번째와 두번째 읽기 결과가 동일한지 확인
+        List<Account> accounts = readTask.get();
+
+        assertThat(accounts.get(0).getBalance()).isEqualTo(2000L);      // 원래 값
+        assertThat(accounts.get(1).getBalance()).isEqualTo(2000L);      // 같은 값 유지!
+
+        System.out.println("REPEATABLE_READ: Non-Repeatable Read 방지 성공!");
+    }
+
+
+
 
 }
