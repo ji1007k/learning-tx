@@ -1,9 +1,11 @@
-spring:
+server:
   port: 18080
+
+spring:
   application:
     name: learning-tx
-  active:
-    profiles: dev
+  profiles:
+    active: dev
 
   # H2 Database 설정 (개발/테스트용)
   datasource:
@@ -30,11 +32,14 @@ spring:
       hibernate:
         format_sql: false
 
-  # 로깅 설정
-  logging:
-    level:
-      root: INFO
-      org.hibernate.SQL: DEBUG
-      org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-      org.springframework.orm.jpa: DEBUG
-      org.springframework.transaction: DEBUG
+# 로깅 설정
+logging:
+  level:
+    root: INFO
+
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql: TRACE
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.orm.jpa: ERROR
+    org.springframework.transaction: ERROR
+    org.h2.engine: DEBUG
